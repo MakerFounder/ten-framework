@@ -4,9 +4,7 @@
 # See the LICENSE file for more information.
 #
 import asyncio
-import itertools
 import json
-import uuid
 import os
 import websockets
 from dataclasses import asdict
@@ -411,7 +409,6 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
     ) -> None:
         """Send ASR result with given text and metadata."""
         asr_result = ASRResult(
-            id=str(uuid.uuid4()),
             text=text,
             final=is_final,
             start_ms=start_ms,
@@ -470,69 +467,42 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 )
                 return
 
-            # Group utterances: process each definite=true individually,
-            # and concatenate adjacent definite=false utterances
+            # Process each utterance individually
             has_final_result = False
-            for is_definite, group in itertools.groupby(
-                result.utterances, key=lambda utt: utt.definite
-            ):
-                utterances_in_group = list(group)
-
-                if is_definite:
-                    # definite=true: send each individually with its own metadata
-                    has_final_result = True
-                    for utterance in utterances_in_group:
-                        # Calculate start_ms and duration_ms for this utterance
-                        actual_start_ms = self._calculate_utterance_start_ms(
-                            utterance.start_time
-                        )
-                        duration_ms = utterance.end_time - utterance.start_time
-
-                        metadata = self._extract_metadata(utterance)
-                        await self._send_asr_result_from_text(
-                            text=utterance.text,
-                            is_final=True,
-                            start_ms=actual_start_ms,
-                            duration_ms=duration_ms,
-                            language=result.language,
-                            metadata=metadata,
-                        )
-                else:
-                    # definite=false: concatenate all utterances in group (no metadata)
-                    # Filter out utterances with invalid timestamps
-                    valid_utterances = [
-                        utt
-                        for utt in utterances_in_group
-                        if utt.start_time != -1 and utt.end_time != -1
-                    ]
-
-                    if not valid_utterances:
-                        self.ten_env.log_warn(
-                            "Skipping definite=false group: all utterances have invalid timestamps"
-                        )
-                        continue
-
-                    concatenated_text = " ".join(
-                        utt.text for utt in valid_utterances
+            for utterance in result.utterances:
+                # Skip utterances with invalid timestamps
+                if utterance.start_time == -1 or utterance.end_time == -1:
+                    self.ten_env.log_warn(
+                        f"Skipping utterance with invalid timestamps: {utterance.text}"
                     )
-                    # Skip sending if concatenated text is empty
-                    if concatenated_text.strip():
-                        # Use first utterance's start_time and last utterance's end_time
-                        first_utt = valid_utterances[0]
-                        last_utt = valid_utterances[-1]
-                        actual_start_ms = self._calculate_utterance_start_ms(
-                            first_utt.start_time
-                        )
-                        duration_ms = last_utt.end_time - first_utt.start_time
+                    continue
 
-                        await self._send_asr_result_from_text(
-                            text=concatenated_text,
-                            is_final=False,
-                            start_ms=actual_start_ms,
-                            duration_ms=duration_ms,
-                            language=result.language,
-                            metadata={},
-                        )
+                # Skip empty utterances
+                if not utterance.text.strip():
+                    continue
+
+                # Calculate start_ms and duration_ms for this utterance
+                actual_start_ms = self._calculate_utterance_start_ms(
+                    utterance.start_time
+                )
+                duration_ms = utterance.end_time - utterance.start_time
+
+                # Determine is_final and metadata based on utterance.definite
+                is_final = utterance.definite
+                if is_final:
+                    has_final_result = True
+                    metadata = self._extract_metadata(utterance)
+                else:
+                    metadata = {}
+
+                await self._send_asr_result_from_text(
+                    text=utterance.text,
+                    is_final=is_final,
+                    start_ms=actual_start_ms,
+                    duration_ms=duration_ms,
+                    language=result.language,
+                    metadata=metadata,
+                )
 
             # finalize end signal if there was any final result
             if has_final_result:
