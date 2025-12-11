@@ -59,6 +59,9 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
         self.config: BytedanceASRLLMConfig | None = None
         self.last_finalize_timestamp: int = 0
         self.audio_dumper: Dumper | None = None
+        self.vendor_result_dumper: Any = (
+            None  # File handle for asr_vendor_result.jsonl
+        )
         self.ten_env: AsyncTenEnv = None  # type: ignore
 
         # Reconnection parameters
@@ -106,6 +109,14 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 )
                 self.audio_dumper = Dumper(dump_file_path)
                 await self.audio_dumper.start()
+
+                # Initialize vendor result dumper
+                vendor_result_dump_path = os.path.join(
+                    self.config.dump_path, "asr_vendor_result.jsonl"
+                )
+                self.vendor_result_dumper = open(
+                    vendor_result_dump_path, "a", encoding="utf-8"
+                )
 
             self.audio_timeline.reset()
 
@@ -186,14 +197,6 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
     @override
     async def stop_connection(self) -> None:
         """Stop connection to Volcengine ASR service."""
-        if self.audio_dumper:
-            try:
-                await self.audio_dumper.stop()
-            except Exception as e:
-                self.ten_env.log_error(f"Error stopping audio dumper: {e}")
-            finally:
-                self.audio_dumper = None
-
         if self.client:
             try:
                 await self.client.disconnect()
@@ -202,6 +205,27 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
             finally:
                 self.client = None
                 self.connected = False
+
+    @override
+    async def on_deinit(self, ten_env: AsyncTenEnv) -> None:
+        """Clean up resources when extension is deinitialized."""
+        await super().on_deinit(ten_env)
+
+        if self.audio_dumper:
+            try:
+                await self.audio_dumper.stop()
+            except Exception as e:
+                ten_env.log_error(f"Error stopping audio dumper: {e}")
+            finally:
+                self.audio_dumper = None
+
+        if self.vendor_result_dumper:
+            try:
+                self.vendor_result_dumper.close()
+            except Exception as e:
+                ten_env.log_error(f"Error closing vendor result dumper: {e}")
+            finally:
+                self.vendor_result_dumper = None
 
     @override
     def is_connected(self) -> bool:
@@ -406,6 +430,24 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
     async def _on_asr_result(self, result: ASRResponse) -> None:
         """Handle ASR result from client."""
         try:
+            # Dump vendor result if enabled
+            if self.vendor_result_dumper:
+                try:
+                    # Get original JSON from payload_msg or construct from result
+                    if result.payload_msg:
+                        vendor_result_json = json.dumps(
+                            result.payload_msg, ensure_ascii=False
+                        )
+                    else:
+                        # Fallback: construct from ASRResponse
+                        vendor_result_json = json.dumps(
+                            asdict(result), ensure_ascii=False
+                        )
+                    self.vendor_result_dumper.write(vendor_result_json + "\n")
+                    self.vendor_result_dumper.flush()
+                except Exception as e:
+                    self.ten_env.log_error(f"Error dumping vendor result: {e}")
+
             # Check if this is an error response
             if result.code != 0:
                 # This is an ASR error response, handle it through send_asr_error
