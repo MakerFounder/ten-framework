@@ -7,8 +7,8 @@ import asyncio
 import json
 import os
 import websockets
-from dataclasses import asdict
-
+from dataclasses import asdict, dataclass
+from ten_ai_base.message import ModuleMetrics
 from typing import Any
 from typing_extensions import override
 
@@ -49,6 +49,40 @@ from .const import (
 )
 
 
+@dataclass
+class TwoPassDelayTracker:
+    """Track two-pass delay metrics timestamps"""
+
+    stream: int | None = None
+    soft_vad: int | None = None
+
+    def record_stream(self, timestamp: int) -> None:
+        """Record stream result timestamp (only the first one)"""
+        self.stream = timestamp if self.stream is None else self.stream
+
+    def record_soft_vad(self, timestamp: int) -> None:
+        """Record soft_vad two_pass result timestamp"""
+        self.soft_vad = timestamp
+
+    def calculate_metrics(self, current_timestamp: int) -> dict[str, int]:
+        return {
+            "two_pass_delay": (
+                current_timestamp - self.stream
+                if self.stream is not None
+                else -1
+            ),
+            "soft_two_pass_delay": (
+                self.soft_vad - self.stream
+                if (self.stream is not None and self.soft_vad is not None)
+                else -1
+            ),
+        }
+
+    def reset(self) -> None:
+        self.stream = None
+        self.soft_vad = None
+
+
 class BytedanceASRLLMExtension(AsyncASRBaseExtension):
     def __init__(self, name: str):
         super().__init__(name)
@@ -78,6 +112,9 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
 
         # Audio timeline tracking (persists across reconnections)
         self.sent_user_audio_duration_ms_before_last_reset: int = 0
+
+        # Two-pass delay metrics tracking
+        self.two_pass_delay_tracker: TwoPassDelayTracker = TwoPassDelayTracker()
 
     @override
     def vendor(self) -> str:
@@ -406,6 +443,27 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
             + self.sent_user_audio_duration_ms_before_last_reset
         )
 
+    async def _send_two_pass_delay_metrics(
+        self, current_timestamp: int
+    ) -> None:
+        """Send two-pass delay metrics via ModuleMetrics.
+
+        Calculates and sends:
+        - two_pass_delay: delay from stream result to hard_vad two_pass result
+        - soft_two_pass_delay: delay from stream result to soft_vad two_pass result
+        """
+        vendor_metrics = self.two_pass_delay_tracker.calculate_metrics(
+            current_timestamp
+        )
+
+        await self._send_asr_metrics(
+            ModuleMetrics(
+                module=ModuleType.ASR,
+                vendor=self.vendor(),
+                metrics=vendor_metrics,
+            )
+        )
+
     async def _send_asr_result_from_text(
         self,
         text: str,
@@ -495,6 +553,8 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
 
             # Process each utterance individually
             has_final_result = False
+            current_timestamp = int(asyncio.get_event_loop().time() * 1000)
+
             for utterance in result.utterances:
                 # Skip utterances with invalid timestamps
                 if utterance.start_time == -1 or utterance.end_time == -1:
@@ -507,6 +567,29 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 if not utterance.text.strip():
                     continue
 
+                # Identify result type and record timestamps
+                additions = utterance.additions if utterance.additions else {}
+                source = additions.get("source", "")
+                invoke_type = additions.get("invoke_type", "")
+                is_final = utterance.definite
+
+                # Record timestamps using tracker
+                match (source, invoke_type, is_final):
+                    case ("stream", _, _):
+                        self.two_pass_delay_tracker.record_stream(
+                            current_timestamp
+                        )
+                    case ("two_pass", "soft_vad", _):
+                        self.two_pass_delay_tracker.record_soft_vad(
+                            current_timestamp
+                        )
+                    case ("two_pass", "hard_vad", True):
+                        await self._send_two_pass_delay_metrics(
+                            current_timestamp
+                        )
+                    case _:
+                        pass  # Other combinations don't need timestamp recording
+
                 # Calculate start_ms and duration_ms for this utterance
                 actual_start_ms = self._calculate_utterance_start_ms(
                     utterance.start_time
@@ -514,7 +597,6 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 duration_ms = utterance.end_time - utterance.start_time
 
                 # Determine is_final and metadata based on utterance.definite
-                is_final = utterance.definite
                 if is_final:
                     has_final_result = True
                     metadata = self._extract_metadata(utterance)
@@ -543,6 +625,9 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
             self.last_finalize_timestamp = 0
             # Send asr_finalize_end signal
             await self.send_asr_finalize_end()
+
+            # Reset two-pass delay metrics tracking for next recognition
+            self.two_pass_delay_tracker.reset()
 
             # After finalize end, connection is expected to be closed by server
             # This is normal behavior, so we don't need to reconnect
