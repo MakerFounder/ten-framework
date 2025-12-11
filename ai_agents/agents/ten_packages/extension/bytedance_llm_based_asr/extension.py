@@ -361,31 +361,15 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
 
     def _extract_metadata(self, utterance: Utterance) -> dict[str, Any]:
         """Extract metadata from utterance additions."""
-        metadata: dict[str, Any] = {}
         if not utterance.additions:
-            return metadata
+            return {}
 
         additions = utterance.additions
         if not isinstance(additions, dict):
-            return metadata
+            return {}
 
-        try:
-            metadata_fields = [
-                "speech_rate",
-                "volume",
-                "emotion",
-                "gender",
-                "lid_lang",
-            ]
-            for field in metadata_fields:
-                if field in additions:
-                    metadata[field] = additions[field]
-        except (TypeError, ValueError) as e:
-            self.ten_env.log_warn(
-                f"Failed to extract metadata from additions: {e}"
-            )
-
-        return metadata
+        # Return additions as metadata directly
+        return additions
 
     def _calculate_utterance_start_ms(
         self, utterance_start_time_ms: int
