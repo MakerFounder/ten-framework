@@ -57,8 +57,8 @@ class TwoPassDelayTracker:
     soft_vad: int | None = None
 
     def record_stream(self, timestamp: int) -> None:
-        """Record stream result timestamp (only the first one)"""
-        self.stream = timestamp if self.stream is None else self.stream
+        """Record stream result timestamp (always use the latest one)"""
+        self.stream = timestamp
 
     def record_soft_vad(self, timestamp: int) -> None:
         """Record soft_vad two_pass result timestamp"""
