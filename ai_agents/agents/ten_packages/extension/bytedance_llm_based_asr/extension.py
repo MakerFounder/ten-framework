@@ -64,17 +64,28 @@ class TwoPassDelayTracker:
         """Record soft_vad two_pass result timestamp"""
         self.soft_vad = timestamp
 
-    def calculate_metrics(self, current_timestamp: int) -> dict[str, int]:
-        metrics: dict[str, int] = {
-            "two_pass_delay": (
+    def calculate_metrics(
+        self,
+        current_timestamp: int,
+        enable_nonstream: bool = False,
+        enable_soft_vad: bool = False,
+    ) -> dict[str, int]:
+        metrics: dict[str, int] = {}
+        # Only include two_pass_delay if enable_nonstream is True
+        if enable_nonstream:
+            metrics["two_pass_delay"] = (
                 current_timestamp - self.stream
                 if self.stream is not None
                 else -1
-            ),
-        }
-        # Only include soft_two_pass_delay if soft_vad was recorded
-        if self.soft_vad is not None and self.stream is not None:
-            metrics["soft_two_pass_delay"] = self.soft_vad - self.stream
+            )
+        # Only include soft_two_pass_delay if soft_vad is enabled
+        # Send even if value is -1 (when soft_vad or stream is None)
+        if enable_nonstream and enable_soft_vad:
+            metrics["soft_two_pass_delay"] = (
+                self.soft_vad - self.stream
+                if self.soft_vad is not None and self.stream is not None
+                else -1
+            )
         return metrics
 
     def reset(self) -> None:
@@ -451,8 +462,21 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
         - two_pass_delay: delay from stream result to hard_vad two_pass result
         - soft_two_pass_delay: delay from stream result to soft_vad two_pass result
         """
+        # Check if enable_nonstream and soft_vad are enabled in request config
+        enable_nonstream = False
+        enable_soft_vad = False
+        if self.config and self.config.request:
+            # Check if enable_nonstream is True in request params
+            enable_nonstream = self.config.request.get(
+                "enable_nonstream", False
+            )
+            # Check if soft_vad_window_size exists in request params
+            enable_soft_vad = "soft_vad_window_size" in self.config.request
+
         vendor_metrics = self.two_pass_delay_tracker.calculate_metrics(
-            current_timestamp
+            current_timestamp,
+            enable_nonstream=enable_nonstream,
+            enable_soft_vad=enable_soft_vad,
         )
 
         await self._send_asr_metrics(
