@@ -430,7 +430,9 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
         finally:
             self._reconnecting = False
 
-    def _extract_metadata(self, utterance: Utterance) -> dict[str, Any]:
+    def _extract_final_result_metadata(
+        self, utterance: Utterance
+    ) -> dict[str, Any]:
         """Extract metadata from utterance additions."""
         if not utterance.additions:
             return {}
@@ -441,6 +443,23 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
 
         # Return additions as metadata directly
         return additions
+
+    def _extract_non_final_result_metadata(
+        self, utterance: Utterance
+    ) -> dict[str, Any]:
+        """Extract metadata from utterance additions for non-final results.
+
+        For non-final results (stream results), only extract invoke_type and source
+        to distinguish between soft_vad, hard_vad, and stream.
+        """
+        metadata = {}
+        if utterance.additions and isinstance(utterance.additions, dict):
+            additions = utterance.additions
+            if "invoke_type" in additions:
+                metadata["invoke_type"] = additions["invoke_type"]
+            if "source" in additions:
+                metadata["source"] = additions["source"]
+        return metadata
 
     def _calculate_utterance_start_ms(
         self, utterance_start_time_ms: int
@@ -623,12 +642,14 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 )
                 duration_ms = utterance.end_time - utterance.start_time
 
-                # Determine is_final and metadata based on utterance.definite
+                # Extract metadata (always include invoke_type and source for all results)
                 if is_final:
                     has_final_result = True
-                    metadata = self._extract_metadata(utterance)
+                    metadata = self._extract_final_result_metadata(utterance)
                 else:
-                    metadata = {}
+                    metadata = self._extract_non_final_result_metadata(
+                        utterance
+                    )
 
                 await self._send_asr_result_from_text(
                     text=utterance.text,
