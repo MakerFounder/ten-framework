@@ -73,8 +73,7 @@ class RenamableDumper(Dumper):
             os.rename(self.dump_file_path, final_path)
             self.dump_file_path = final_path
             return True
-        except Exception as e:
-            # Log the exception for debugging but don't expose it
+        except Exception:
             return False
 
 
