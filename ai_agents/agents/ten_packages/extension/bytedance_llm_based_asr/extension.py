@@ -43,6 +43,7 @@ from ten_runtime import (
 
 from .config import BytedanceASRLLMConfig
 from .volcengine_asr_client import VolcengineASRClient, ASRResponse, Utterance
+from .log_id_dumper_manager import LogIdDumperManager
 from .const import (
     DUMP_FILE_NAME,
     is_reconnectable_error,
@@ -102,7 +103,9 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
         self.client: VolcengineASRClient | None = None
         self.config: BytedanceASRLLMConfig | None = None
         self.last_finalize_timestamp: int = 0
-        self.audio_dumper: Dumper | None = None
+        self.audio_dumper: Dumper | None = (
+            None  # Original dumper, keep unchanged
+        )
         self.vendor_result_dumper: Any = (
             None  # File handle for asr_vendor_result.jsonl
         )
@@ -125,6 +128,9 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
 
         # Two-pass delay metrics tracking
         self.two_pass_delay_tracker: TwoPassDelayTracker = TwoPassDelayTracker()
+
+        # Log ID dumper manager
+        self.log_id_dumper_manager: LogIdDumperManager | None = None
 
     @override
     def vendor(self) -> str:
@@ -151,6 +157,7 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
             self.base_delay = self.config.base_delay
 
             if self.config.dump:
+                # Initialize original audio dumper (unchanged logic)
                 dump_file_path = os.path.join(
                     self.config.dump_path, DUMP_FILE_NAME
                 )
@@ -163,6 +170,10 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 )
                 self.vendor_result_dumper = open(
                     vendor_result_dump_path, "a", encoding="utf-8"
+                )
+                # Initialize log_id_dumper_manager
+                self.log_id_dumper_manager = LogIdDumperManager(
+                    self.config, ten_env
                 )
 
             self.audio_timeline.reset()
@@ -219,6 +230,10 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
             self.client.set_on_connected_callback(self._on_connected)
             self.client.set_on_disconnected_callback(self._on_disconnected)
 
+            # Create temporary log_id_dumper for new connection
+            if self.log_id_dumper_manager:
+                await self.log_id_dumper_manager.create_temp_dumper()
+
             await self.client.connect()
             self.connected = True
             self.sent_user_audio_duration_ms_before_last_reset += (
@@ -253,6 +268,10 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 self.client = None
                 self.connected = False
 
+        # Stop log_id_dumper_manager if exists
+        if self.log_id_dumper_manager:
+            await self.log_id_dumper_manager.stop_all()
+
     @override
     async def on_deinit(self, ten_env: AsyncTenEnv) -> None:
         """Clean up resources when extension is deinitialized."""
@@ -265,6 +284,11 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 ten_env.log_error(f"Error stopping audio dumper: {e}")
             finally:
                 self.audio_dumper = None
+
+        # Stop log_id_dumper_manager if exists
+        if self.log_id_dumper_manager:
+            await self.log_id_dumper_manager.stop_all()
+            # Keep temp file if not renamed (as per requirement)
 
         if self.vendor_result_dumper:
             try:
@@ -316,9 +340,13 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
             # Get audio data from frame
             audio_data = bytes(buf)
 
-            # Dump audio if enabled
+            # Dump audio if enabled (original audio_dumper, unchanged)
             if self.audio_dumper:
                 await self.audio_dumper.push_bytes(audio_data)
+
+            # Dump audio to log_id_dumper if enabled (manager handles rename if needed)
+            if self.log_id_dumper_manager:
+                await self.log_id_dumper_manager.push_bytes(audio_data)
 
             self.audio_timeline.add_user_audio(
                 int(len(buf) / (self.input_audio_sample_rate() / 1000 * 2))
@@ -530,6 +558,18 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
     async def _on_asr_result(self, result: ASRResponse) -> None:
         """Handle ASR result from client."""
         try:
+            # Extract log_id from result.additions.log_id (only process the first one)
+            if (
+                result.result
+                and isinstance(result.result, dict)
+                and self.log_id_dumper_manager
+            ):
+                additions = result.result.get("additions")
+                if additions and isinstance(additions, dict):
+                    log_id = additions.get("log_id")
+                    if log_id and isinstance(log_id, str):
+                        self.log_id_dumper_manager.update_log_id(log_id)
+
             # Dump vendor result if enabled
             if self.vendor_result_dumper:
                 try:
