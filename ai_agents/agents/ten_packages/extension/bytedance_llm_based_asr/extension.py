@@ -4,6 +4,7 @@
 # See the LICENSE file for more information.
 #
 import asyncio
+import copy
 import json
 import os
 import websockets
@@ -461,16 +462,25 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
     def _extract_final_result_metadata(
         self, utterance: Utterance
     ) -> dict[str, Any]:
-        """Extract metadata from utterance additions."""
+        """Extract metadata from utterance additions.
+
+        First copies base class metadata, then adds/extends with subclass fields.
+        """
+        # Start with a copy of base class metadata if available
+        metadata = (
+            copy.deepcopy(self.metadata) if self.metadata is not None else {}
+        )
+
         if not utterance.additions:
-            return {}
+            return metadata
 
         additions = utterance.additions
         if not isinstance(additions, dict):
-            return {}
+            return metadata
 
-        # Return additions as metadata directly
-        return additions
+        # Update metadata with additions (subclass fields override base class fields)
+        metadata.update(additions)
+        return metadata
 
     def _extract_non_final_result_metadata(
         self, utterance: Utterance
@@ -479,8 +489,14 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
 
         For non-final results (stream results), only extract invoke_type and source
         to distinguish between soft_vad, hard_vad, and stream.
+
+        First copies base class metadata, then adds/extends with subclass fields.
         """
-        metadata = {}
+        # Start with a copy of base class metadata if available
+        metadata = (
+            copy.deepcopy(self.metadata) if self.metadata is not None else {}
+        )
+
         if utterance.additions and isinstance(utterance.additions, dict):
             additions = utterance.additions
             if "invoke_type" in additions:
@@ -627,13 +643,19 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 actual_start_ms = self._calculate_utterance_start_ms(
                     result.start_ms
                 )
+                # Start with a copy of base class metadata if available
+                metadata = (
+                    copy.deepcopy(self.metadata)
+                    if self.metadata is not None
+                    else {}
+                )
                 await self._send_asr_result_from_text(
                     text=result.text,
                     is_final=False,
                     start_ms=actual_start_ms,
                     duration_ms=result.duration_ms,
                     language=result.language,
-                    metadata={},
+                    metadata=metadata,
                 )
                 return
 
