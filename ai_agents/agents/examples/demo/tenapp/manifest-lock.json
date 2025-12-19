@@ -4,8 +4,8 @@
     {
       "type": "system",
       "name": "ten_runtime_go",
-      "version": "0.11.27",
-      "hash": "3cb246f95ec5e22b2c1a44ed6c09d75af07755030172fa6abc97f35822405c77",
+      "version": "0.11.45",
+      "hash": "7c943ec076526ae84307c25dd4a5471a932d1d2818559e8c50da165d35c12050",
       "dependencies": [
         {
           "type": "system",
@@ -22,8 +22,8 @@
     {
       "type": "system",
       "name": "ten_ai_base",
-      "version": "0.7.22",
-      "hash": "27e5467c5dc841757f5a6f52e70b0d2c09903be84ade73b404b45c6cac9888f8",
+      "version": "0.7.30",
+      "hash": "1608448d02897a411f6b863974fcaf12a695e0f588ceab1250e5581344dd0280",
       "dependencies": [
         {
           "type": "system",
@@ -242,10 +242,78 @@
       "path": "../../../ten_packages/extension/weatherapi_tool_python"
     },
     {
+      "type": "extension",
+      "name": "minimax_tts_websocket_python",
+      "version": "0.4.0",
+      "hash": "8bc3ae28854a5fdcc6a64bde759e80d33b20e0be2df7aa56fa75381b77b38521",
+      "dependencies": [
+        {
+          "type": "system",
+          "name": "ten_runtime_python"
+        },
+        {
+          "type": "system",
+          "name": "ten_ai_base"
+        }
+      ],
+      "path": "../../../ten_packages/extension/minimax_tts_websocket_python"
+    },
+    {
+      "type": "extension",
+      "name": "deepgram_asr_python",
+      "version": "0.2.2",
+      "hash": "635fa11ecbad2afcfdf43d643c23168db3077ebe3acfb862f46bffb15d082834",
+      "dependencies": [
+        {
+          "type": "system",
+          "name": "ten_runtime_python"
+        },
+        {
+          "type": "system",
+          "name": "ten_ai_base"
+        }
+      ],
+      "path": "../../../ten_packages/extension/deepgram_asr_python"
+    },
+    {
+      "type": "extension",
+      "name": "gemini_llm2_python",
+      "version": "0.1.0",
+      "hash": "ace9d18aa78ad810294b4bb943c1e7100b39523109b2e465d462e1d4ace79593",
+      "dependencies": [
+        {
+          "type": "system",
+          "name": "ten_runtime_python"
+        },
+        {
+          "type": "system",
+          "name": "ten_ai_base"
+        }
+      ],
+      "path": "../../../ten_packages/extension/gemini_llm2_python"
+    },
+    {
+      "type": "extension",
+      "name": "inworld_tts_python",
+      "version": "0.1.0",
+      "hash": "a23e05b81653a2fde6e8b9d75a3a5a1aea78faf58d2fda172a4ad20efd86efe2",
+      "dependencies": [
+        {
+          "type": "system",
+          "name": "ten_runtime_python"
+        },
+        {
+          "type": "system",
+          "name": "ten_ai_base"
+        }
+      ],
+      "path": "../../../ten_packages/extension/inworld_tts_python"
+    },
+    {
       "type": "system",
       "name": "ten_runtime_python",
-      "version": "0.11.27",
-      "hash": "409c90d00363ff575f7e7d3c6285047c609748490ffb5da52910efc983941c91",
+      "version": "0.11.45",
+      "hash": "2acf23c9e954ccad6aa2979f759535e46f98c654d65d9c9e4e6e626e043a0e47",
       "dependencies": [
         {
           "type": "system",
@@ -266,8 +334,8 @@
     {
       "type": "system",
       "name": "ten_runtime",
-      "version": "0.11.27",
-      "hash": "96129244e41310723b93f2eeef06c41d51eb8086d60a703d3665495af3880050",
+      "version": "0.11.45",
+      "hash": "3e1093675a4c3eecc340662886a948384c9cfa7088af51e0f9344ba11c9bd84c",
       "supports": [
         {
           "os": "linux",
@@ -290,8 +358,8 @@
     {
       "type": "addon_loader",
       "name": "python_addon_loader",
-      "version": "0.11.27",
-      "hash": "a15c56876f5303b0c47d4019a51e9586f449d38a1cf52b5848746174c1bc5838",
+      "version": "0.11.45",
+      "hash": "13e9c33f444ced60f7af6f00ef6741dcb113790eb13d41ef6ef52c58ff606123",
       "dependencies": [
         {
           "type": "system",

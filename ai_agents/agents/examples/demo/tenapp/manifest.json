@@ -56,6 +56,15 @@
     },
     {
       "path": "../../../ten_packages/extension/minimax_tts_websocket_python"
+    },
+    {
+      "path": "../../../ten_packages/extension/deepgram_asr_python"
+    },
+    {
+      "path": "../../../ten_packages/extension/gemini_llm2_python"
+    },
+    {
+      "path": "../../../ten_packages/extension/inworld_tts_python"
     }
   ],
   "scripts": {

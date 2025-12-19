@@ -1,0 +1,8 @@
+{
+    "params": {
+        "api_key": "${env:INWORLD_API_KEY}",
+        "voice_id": "Ashley",
+        "model_id": "inworld-tts-1",
+        "sample_rate": 16000
+    }
+}

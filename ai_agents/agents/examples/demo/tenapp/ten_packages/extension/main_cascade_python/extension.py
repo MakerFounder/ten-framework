@@ -106,7 +106,6 @@ class MainControlExtension(AsyncExtension):
             remaining_text = self.sentence_fragment or ""
             self.sentence_fragment = ""
             await self._send_to_tts(remaining_text, True)
-
         await self._send_transcript(
             "assistant",
             event.text,
