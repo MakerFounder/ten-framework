@@ -10,6 +10,7 @@ class InworldTTSConfig(BaseModel):
     model_id: str = "inworld-tts-1"
     sample_rate: int = 16000
     base_url: str = "https://api.inworld.ai"
+    disable_text_normalization: bool = True  # Saves 30-40ms latency
     params: Dict[str, Any] = Field(default_factory=dict)
 
     def update_params(self) -> None:
@@ -25,6 +26,8 @@ class InworldTTSConfig(BaseModel):
                 self.sample_rate = self.params["sample_rate"]
             if "base_url" in self.params:
                 self.base_url = self.params["base_url"]
+            if "disable_text_normalization" in self.params:
+                self.disable_text_normalization = self.params["disable_text_normalization"]
 
     def to_str(self, sensitive_handling: bool = False) -> str:
         """Convert config to string with optional sensitive data handling."""

@@ -1376,64 +1376,23 @@
                       "extension": "streamid_adapter"
                     }
                   ]
-                },
-                {
-                  "name": "pcm_frame",
-                  "source": [
-                    {
-                      "extension": "v2v"
-                    }
-                  ]
                 }
               ],
-              "data": [
-                {
-                  "name": "data",
-                  "source": [
-                    {
-                      "extension": "message_collector"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "extension": "main_control",
-              "data": [
-                {
-                  "names": [
-                    "mllm_server_input_transcript",
-                    "mllm_server_output_transcript",
-                    "mllm_server_session_ready",
-                    "mllm_server_interrupted",
-                    "mllm_server_function_call"
-                  ],
-                  "source": [
-                    {
-                      "extension": "v2v"
-                    }
-                  ]
-                }
-              ],
+              "data": [],
               "cmd": [
                 {
-                  "names": [
-                    "on_user_left",
-                    "on_user_joined"
-                  ],
-                  "source": [
+                  "name": "on_user_joined",
+                  "dest": [
                     {
-                      "extension": "agora_rtc"
+                      "extension": "main_control"
                     }
                   ]
                 },
                 {
-                  "names": [
-                    "tool_register"
-                  ],
-                  "source": [
+                  "name": "on_user_left",
+                  "dest": [
                     {
-                      "extension": "weatherapi_tool_python"
+                      "extension": "main_control"
                     }
                   ]
                 }
@@ -1447,6 +1406,74 @@
                   "dest": [
                     {
                       "extension": "v2v"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "extension": "v2v",
+              "audio_frame": [
+                {
+                  "name": "pcm_frame",
+                  "dest": [
+                    {
+                      "extension": "agora_rtc"
+                    }
+                  ]
+                }
+              ],
+              "data": [
+                {
+                  "name": "mllm_server_output_transcript",
+                  "dest": [
+                    {
+                      "extension": "main_control"
+                    }
+                  ]
+                },
+                {
+                  "name": "mllm_server_session_ready",
+                  "dest": [
+                    {
+                      "extension": "main_control"
+                    }
+                  ]
+                },
+                {
+                  "name": "mllm_server_interrupted",
+                  "dest": [
+                    {
+                      "extension": "main_control"
+                    }
+                  ]
+                },
+                {
+                  "name": "mllm_server_function_call",
+                  "dest": [
+                    {
+                      "extension": "main_control"
+                    }
+                  ]
+                },
+                {
+                  "name": "mllm_server_input_transcript",
+                  "dest": [
+                    {
+                      "extension": "main_control"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "extension": "message_collector",
+              "data": [
+                {
+                  "name": "data",
+                  "dest": [
+                    {
+                      "extension": "agora_rtc"
                     }
                   ]
                 }
@@ -2287,6 +2314,10 @@
               "extension_group": "tts",
               "property": {
                 "params": {
+                  "subscription": "${env:AZURE_TTS_API_KEY}",
+                  "region": "${env:AZURE_TTS_REGION}",
+                  "speech_recognition_language": "en-US",
+                  "output_format": "Raw16Khz16BitMonoPcm",
                   "propertys": [
                     [
                       "Speech_LogFilename",
@@ -2296,11 +2327,7 @@
                       "SpeechServiceConnection_SynthVoice",
                       "en-US-AriaNeural"
                     ]
-                  ],
-                  "speech_recognition_language": "en-US",
-                  "region": "${env:AZURE_TTS_REGION}",
-                  "output_format": "Raw16Khz16BitMonoPcm",
-                  "subscription": "${env:AZURE_TTS_API_KEY}"
+                  ]
                 }
               }
             },

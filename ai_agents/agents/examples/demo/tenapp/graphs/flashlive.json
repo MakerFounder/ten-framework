@@ -17,7 +17,9 @@
           "subscribe_audio": true,
           "publish_audio": true,
           "publish_data": true,
-          "enable_agora_asr": false
+          "enable_agora_asr": false,
+          "audio_frame_send_delay_ms": 0,
+          "subscribe_audio_samples_per_frame": 160
         }
       },
       {
@@ -31,14 +33,14 @@
             "url": "wss://api.deepgram.com/v2/listen",
             "model": "flux-general-en",
             "language": "en-US",
-            "eot_threshold": 0.7,
-            "eot_timeout_ms": 2000
+            "eot_threshold": 0.65,
+            "eot_timeout_ms": 1000,
+            "eager_eot_threshold": 0.35
           },
           "sample_rate": 16000,
           "encoding": "linear16",
           "interim_results": true,
           "punctuate": true,
-          "eager_eot_threshold": 0.5,
           "interrupt_on_speech": true
         }
       },

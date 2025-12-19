@@ -36,6 +36,9 @@
                         },
                         "sample_rate": {
                             "type": "int64"
+                        },
+                        "disable_text_normalization": {
+                            "type": "bool"
                         }
                     }
                 }

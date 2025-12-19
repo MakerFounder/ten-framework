@@ -13,7 +13,7 @@ from .config import InworldTTSConfig
 
 
 class InworldTTSClient:
-    """Inworld AI TTS Client using streaming API."""
+    """Inworld AI TTS Client using streaming API with optimized latency."""
 
     def __init__(
         self,
@@ -35,11 +35,15 @@ class InworldTTSClient:
     async def start(self) -> None:
         """Start the TTS client."""
         self._running = True
-        # Create session with larger buffer limits
-        connector = aiohttp.TCPConnector(limit=10)
+        timeout = aiohttp.ClientTimeout(total=30, connect=5)
+        connector = aiohttp.TCPConnector(
+            limit=10,
+            keepalive_timeout=30,
+            enable_cleanup_closed=True
+        )
         self._session = aiohttp.ClientSession(
             connector=connector,
-            read_bufsize=1024 * 1024  # 1MB buffer
+            timeout=timeout
         )
         self._process_task = asyncio.create_task(self._process_loop())
         self.ten_env.log_info("Inworld TTS client started")
@@ -90,7 +94,7 @@ class InworldTTSClient:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                self.ten_env.log_error(f"Error in TTS process loop: {e}")
+                self.ten_env.log_error(f"TTS process error: {e}")
                 if self.error_callback:
                     await self.error_callback(
                         self.cur_request_id,
@@ -101,7 +105,7 @@ class InworldTTSClient:
                     )
 
     async def _synthesize_stream(self, text: str, request_id: str) -> None:
-        """Synthesize text to speech using Inworld streaming API."""
+        """Synthesize text to speech using TRUE streaming - process chunks as they arrive."""
         if not self._session:
             return
 
@@ -116,13 +120,12 @@ class InworldTTSClient:
             "text": text,
             "voiceId": self.config.voice_id,
             "modelId": self.config.model_id,
+            "disable_text_normalization": self.config.disable_text_normalization,
             "audio_config": {
                 "audio_encoding": "LINEAR16",
                 "sample_rate_hertz": self.config.sample_rate,
             },
         }
-
-        self.ten_env.log_info(f"Inworld TTS request: voice={self.config.voice_id}, text_len={len(text)}")
 
         try:
             async with self._session.post(
@@ -130,9 +133,7 @@ class InworldTTSClient:
             ) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    self.ten_env.log_error(
-                        f"Inworld TTS API error: {response.status} - {error_text}"
-                    )
+                    self.ten_env.log_error(f"Inworld TTS API error: {response.status}")
                     if self.error_callback:
                         await self.error_callback(
                             request_id,
@@ -143,47 +144,51 @@ class InworldTTSClient:
                         )
                     return
 
-                # Read the full response and process it
-                full_response = await response.read()
-                self.ten_env.log_info(f"Inworld response: {len(full_response)} bytes")
-                response_text = full_response.decode("utf-8")
-                
-                # Log first 500 chars for debugging
-                self.ten_env.log_info(f"Response preview: {response_text[:500] if len(response_text) > 500 else response_text}")
-                
-                # Process newline-delimited JSON
-                lines = response_text.split("\n")
-                self.ten_env.log_info(f"Response has {len(lines)} lines")
-                
-                for line in lines:
-                    line = line.strip()
-                    if not line:
-                        continue
+                # TRUE STREAMING: Process each line as it arrives
+                buffer = b""
+                async for chunk in response.content.iter_any():
+                    buffer += chunk
+                    
+                    # Process complete lines (newline-delimited JSON)
+                    while b"\n" in buffer:
+                        line, buffer = buffer.split(b"\n", 1)
+                        line = line.strip()
+                        if not line:
+                            continue
 
+                        try:
+                            data = json.loads(line.decode("utf-8"))
+                            audio_content = data.get("result", {}).get("audioContent")
+                            
+                            if audio_content:
+                                audio_bytes = base64.b64decode(audio_content)
+                                
+                                # Strip WAV header if present
+                                if len(audio_bytes) > 44 and audio_bytes[:4] == b"RIFF":
+                                    audio_bytes = audio_bytes[44:]
+                                
+                                if self.response_msgs and len(audio_bytes) > 0:
+                                    await self.response_msgs.put(
+                                        (audio_bytes, False, request_id)
+                                    )
+                        except json.JSONDecodeError:
+                            continue
+
+                # Process any remaining data in buffer
+                if buffer.strip():
                     try:
-                        chunk = json.loads(line)
-                        self.ten_env.log_info(f"Chunk keys: {list(chunk.keys())}")
-                        audio_content = chunk.get("result", {}).get("audioContent")
-                        
+                        data = json.loads(buffer.decode("utf-8"))
+                        audio_content = data.get("result", {}).get("audioContent")
                         if audio_content:
                             audio_bytes = base64.b64decode(audio_content)
-                            self.ten_env.log_info(f"Decoded {len(audio_bytes)} bytes, first 4: {audio_bytes[:4] if len(audio_bytes) >= 4 else audio_bytes}")
-                            
-                            # Check for WAV header (RIFF)
                             if len(audio_bytes) > 44 and audio_bytes[:4] == b"RIFF":
                                 audio_bytes = audio_bytes[44:]
-                                self.ten_env.log_info(f"Stripped WAV header, now {len(audio_bytes)} bytes")
-                            
                             if self.response_msgs and len(audio_bytes) > 0:
                                 await self.response_msgs.put(
                                     (audio_bytes, False, request_id)
                                 )
-                                self.ten_env.log_info(f"Queued {len(audio_bytes)} bytes of audio")
-                        else:
-                            self.ten_env.log_warn(f"No audioContent in chunk")
-                    except json.JSONDecodeError as e:
-                        self.ten_env.log_warn(f"Failed to parse JSON: {e}")
-                        continue
+                    except json.JSONDecodeError:
+                        pass
 
         except aiohttp.ClientError as e:
             self.ten_env.log_error(f"Inworld TTS request failed: {e}")

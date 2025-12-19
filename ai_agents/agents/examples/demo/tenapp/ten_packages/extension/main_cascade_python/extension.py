@@ -20,17 +20,12 @@ from .agent.events import (
     UserLeftEvent,
 )
 from .helper import _send_cmd, _send_data, parse_sentences
-from .config import MainControlConfig  # assume extracted from your base model
+from .config import MainControlConfig
 
 import uuid
 
 
 class MainControlExtension(AsyncExtension):
-    """
-    The entry point of the agent module.
-    Consumes semantic AgentEvents from the Agent class and drives the runtime behavior.
-    """
-
     def __init__(self, name: str):
         super().__init__(name)
         self.ten_env: AsyncTenEnv = None
@@ -48,29 +43,22 @@ class MainControlExtension(AsyncExtension):
 
     async def on_init(self, ten_env: AsyncTenEnv):
         self.ten_env = ten_env
-
-        # Load config from runtime properties
         config_json, _ = await ten_env.get_property_to_json(None)
         self.config = MainControlConfig.model_validate_json(config_json)
-
         self.agent = Agent(ten_env)
 
-        # Now auto-register decorated methods
         for attr_name in dir(self):
             fn = getattr(self, attr_name)
             event_type = getattr(fn, "_agent_event_type", None)
             if event_type:
                 self.agent.on(event_type, fn)
 
-    # === Register handlers with decorators ===
     @agent_event_handler(UserJoinedEvent)
     async def _on_user_joined(self, event: UserJoinedEvent):
         self._rtc_user_count += 1
         if self._rtc_user_count == 1 and self.config and self.config.greeting:
             await self._send_to_tts(self.config.greeting, True)
-            await self._send_transcript(
-                "assistant", self.config.greeting, True, 100
-            )
+            await self._send_transcript("assistant", self.config.greeting, True, 100)
 
     @agent_event_handler(UserLeftEvent)
     async def _on_user_left(self, event: UserLeftEvent):
@@ -115,10 +103,9 @@ class MainControlExtension(AsyncExtension):
         )
 
     async def on_start(self, ten_env: AsyncTenEnv):
-        ten_env.log_info("[MainControlExtension] on_start")
+        pass
 
     async def on_stop(self, ten_env: AsyncTenEnv):
-        ten_env.log_info("[MainControlExtension] on_stop")
         self.stopped = True
         await self.agent.stop()
 
@@ -128,7 +115,6 @@ class MainControlExtension(AsyncExtension):
     async def on_data(self, ten_env: AsyncTenEnv, data: Data):
         await self.agent.on_data(data)
 
-    # === helpers ===
     async def _send_transcript(
         self,
         role: str,
@@ -137,14 +123,7 @@ class MainControlExtension(AsyncExtension):
         stream_id: int,
         data_type: Literal["text", "reasoning"] = "text",
     ):
-        """
-        Sends the transcript (ASR or LLM output) to the message collector.
-        """
-        # Guard: Skip transcript if no_transcript is enabled
         if self.config.no_transcript:
-            self.ten_env.log_info(
-                f"[MainControlExtension] Transcript suppressed (no_transcript=true): role={role}, final={final}"
-            )
             return
 
         if data_type == "text":
@@ -169,27 +148,16 @@ class MainControlExtension(AsyncExtension):
                 {
                     "data_type": "raw",
                     "role": role,
-                    "text": json.dumps(
-                        {
-                            "type": "reasoning",
-                            "data": {
-                                "text": text,
-                            },
-                        }
-                    ),
+                    "text": json.dumps({"type": "reasoning", "data": {"text": text}}),
                     "text_ts": int(time.time() * 1000),
                     "is_final": final,
                     "stream_id": stream_id,
                 },
             )
-        self.ten_env.log_info(
-            f"[MainControlExtension] Sent transcript: {role}, final={final}, text={text}"
-        )
 
     async def _send_to_tts(self, text: str, is_final: bool):
-        """
-        Sends a sentence to the TTS system.
-        """
+        if not text:
+            return
         request_id = f"tts-request-{self.turn_id}"
         await _send_data(
             self.ten_env,
@@ -202,18 +170,11 @@ class MainControlExtension(AsyncExtension):
                 "metadata": self._current_metadata(),
             },
         )
-        self.ten_env.log_info(
-            f"[MainControlExtension] Sent to TTS: is_final={is_final}, text={text}"
-        )
 
     async def _interrupt(self):
-        """
-        Interrupts ongoing LLM and TTS generation. Typically called when user speech is detected.
-        """
         self.sentence_fragment = ""
         await self.agent.flush_llm()
         await _send_data(
             self.ten_env, "tts_flush", "tts", {"flush_id": str(uuid.uuid4())}
         )
         await _send_cmd(self.ten_env, "flush", "agora_rtc")
-        self.ten_env.log_info("[MainControlExtension] Interrupt signal sent")
