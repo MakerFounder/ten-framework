@@ -110,7 +110,7 @@ class GeminiChatAPI:
                         created=0,
                     )
 
-            yield LLMResponseMessageDone(response_id="", role="assistant")
+            yield LLMResponseMessageDone(response_id="", role="assistant", content=full_content)
 
         except Exception as e:
             self.ten_env.log_error(f"Error in get_chat_completions: {e}")
