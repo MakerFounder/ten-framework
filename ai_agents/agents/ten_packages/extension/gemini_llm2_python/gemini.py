@@ -3,6 +3,7 @@
 # Optimized for low-latency voice conversations
 #
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import AsyncGenerator, List
 from pydantic import BaseModel
 
@@ -83,11 +84,15 @@ class GeminiChatAPI:
         try:
             contents = self._convert_messages_to_contents(request_input.messages)
             
+            # Dynamically add current date to system instruction
+            current_date = datetime.now().strftime("%B %d, %Y")
+            system_instruction = f"Today's date is {current_date}. {self.config.prompt}"
+            
             generation_config = types.GenerateContentConfig(
                 temperature=self.config.temperature,
                 top_p=self.config.top_p,
                 max_output_tokens=self.config.max_tokens,
-                system_instruction=self.config.prompt,
+                system_instruction=system_instruction,
             )
 
             self.ten_env.log_info(f"Requesting: model={self.config.model}")

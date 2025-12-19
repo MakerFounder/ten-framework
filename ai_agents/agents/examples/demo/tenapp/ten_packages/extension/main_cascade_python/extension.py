@@ -37,6 +37,8 @@ class MainControlExtension(AsyncExtension):
         self.sentence_fragment: str = ""
         self.turn_id: int = 0
         self.session_id: str = "0"
+        self._last_final_time: float = 0  # Track when we last processed a final
+        self._last_text: str = ""  # Track previous text to detect new speech
 
     def _current_metadata(self) -> dict:
         return {"session_id": self.session_id, "turn_id": self.turn_id}
@@ -74,11 +76,36 @@ class MainControlExtension(AsyncExtension):
         stream_id = int(self.session_id)
         if not event.text:
             return
-        if event.final or len(event.text) > 2:
+        
+        current_time = time.time()
+        prev_text = self._last_text
+        
+        # Detect if this is genuinely NEW speech (user barge-in)
+        # New speech = text that doesn't start with the previous text (not a continuation)
+        is_new_speech = (
+            not event.text.startswith(prev_text) and 
+            len(event.text) < len(prev_text) + 5
+        )
+        
+        # Only interrupt if:
+        # 1. It's been more than 500ms since last final (prevents TurnResumed issues)
+        # 2. OR it's clearly new speech (short text that's not a continuation)
+        time_since_final = current_time - self._last_final_time
+        should_interrupt = (time_since_final > 0.5) or (is_new_speech and len(event.text) <= 20)
+        
+        if should_interrupt and (event.final or len(event.text) > 2):
             await self._interrupt()
+        
+        self._last_text = event.text
+        
         if event.final:
-            self.turn_id += 1
-            await self.agent.queue_llm_input(event.text)
+            # Only queue LLM if we haven't already queued this exact text recently
+            # This prevents duplicate requests from EagerEndOfTurn + EndOfTurn
+            time_since_last_final = current_time - self._last_final_time
+            if time_since_last_final > 0.3:
+                self._last_final_time = current_time
+                self.turn_id += 1
+                await self.agent.queue_llm_input(event.text)
         await self._send_transcript("user", event.text, event.final, stream_id)
 
     @agent_event_handler(LLMResponseEvent)
