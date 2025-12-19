@@ -2692,10 +2692,11 @@
               "property": {
                 "api_key": "${env:GEMINI_API_KEY}",
                 "model": "gemini-3-flash-preview",
-                "max_tokens": 512,
-                "temperature": 0.7,
+                "max_tokens": 1024,
+                "temperature": 0.9,
                 "prompt": "You are FlashLive, a helpful AI voice assistant. Start your response immediately with the answer, no filler words. Keep responses very short (1-2 sentences unless the user asks for more detail.) and conversational since this is a voice chat. Be natural, engaging, and helpful.",
-                "max_memory_length": 10
+                "max_memory_length": 10,
+                "thinking_level": "HIGH"
               }
             },
             {
