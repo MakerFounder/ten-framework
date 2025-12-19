@@ -40,6 +40,10 @@ class BytedanceASRLLMConfig(BaseModel):
             )
         return self.params["audio"]
 
+    def get_enable_utterance_grouping(self) -> bool:
+        """Get enable utterance grouping from params."""
+        return self.params.get("enable_utterance_grouping", True)
+
     def get_request_config(self) -> dict[str, Any]:
         """Get request configuration for ASR.
 

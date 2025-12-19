@@ -5,6 +5,7 @@
 #
 import asyncio
 import copy
+import itertools
 import json
 import os
 import websockets
@@ -132,6 +133,9 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
         # Log ID dumper manager
         self.log_id_dumper_manager: LogIdDumperManager | None = None
 
+        # Enable utterance grouping
+        self.enable_utterance_grouping: bool = True
+
     @override
     def vendor(self) -> str:
         """Get the name of the ASR vendor."""
@@ -171,6 +175,9 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 )
 
             self.audio_timeline.reset()
+            self.enable_utterance_grouping = (
+                self.config.get_enable_utterance_grouping()
+            )
 
         except Exception as e:
             self.ten_env.log_error(f"Configuration error: {e}")
@@ -580,6 +587,40 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
         )
         await self.send_asr_result(asr_result)
 
+    async def _track_utterance_timestamps(self, result: ASRResponse) -> None:
+        """Track utterance timestamps and send two-pass delay metrics."""
+        current_timestamp = int(asyncio.get_event_loop().time() * 1000)
+        for utterance in result.utterances:
+            # Skip utterances with invalid timestamps
+            if utterance.start_time == -1 or utterance.end_time == -1:
+                self.ten_env.log_warn(
+                    f"Skipping utterance with invalid timestamps: {utterance.text}"
+                )
+                continue
+
+            # Skip empty utterances
+            if not utterance.text.strip():
+                continue
+
+            # Identify result type and record timestamps
+            additions = utterance.additions if utterance.additions else {}
+            source = additions.get("source", "")
+            invoke_type = additions.get("invoke_type", "")
+            is_final = utterance.definite
+
+            # Record timestamps using tracker
+            match (source, invoke_type, is_final):
+                case ("stream", _, _):
+                    self.two_pass_delay_tracker.record_stream(current_timestamp)
+                case ("two_pass", "soft_vad", _):
+                    self.two_pass_delay_tracker.record_soft_vad(
+                        current_timestamp
+                    )
+                case ("two_pass", "hard_vad", True):
+                    await self._send_two_pass_delay_metrics(current_timestamp)
+                case _:
+                    pass  # Other combinations don't need timestamp recording
+
     async def _on_asr_result(self, result: ASRResponse) -> None:
         """Handle ASR result from client."""
         try:
@@ -668,68 +709,113 @@ class BytedanceASRLLMExtension(AsyncASRBaseExtension):
                 )
                 return
 
-            # Process each utterance individually
             has_final_result = False
-            current_timestamp = int(asyncio.get_event_loop().time() * 1000)
 
-            for utterance in result.utterances:
-                # Skip utterances with invalid timestamps
-                if utterance.start_time == -1 or utterance.end_time == -1:
-                    self.ten_env.log_warn(
-                        f"Skipping utterance with invalid timestamps: {utterance.text}"
+            await self._track_utterance_timestamps(result)
+
+            if not self.enable_utterance_grouping:
+                for utterance in result.utterances:
+                    # Skip utterances with invalid timestamps
+                    if utterance.start_time == -1 or utterance.end_time == -1:
+                        self.ten_env.log_warn(
+                            f"Skipping utterance with invalid timestamps: {utterance.text}"
+                        )
+                        continue
+
+                    # Skip empty utterances
+                    if not utterance.text.strip():
+                        continue
+
+                    is_final = utterance.definite
+                    # Calculate start_ms and duration_ms for this utterance
+                    actual_start_ms = self._calculate_utterance_start_ms(
+                        utterance.start_time
                     )
-                    continue
+                    duration_ms = utterance.end_time - utterance.start_time
 
-                # Skip empty utterances
-                if not utterance.text.strip():
-                    continue
-
-                # Identify result type and record timestamps
-                additions = utterance.additions if utterance.additions else {}
-                source = additions.get("source", "")
-                invoke_type = additions.get("invoke_type", "")
-                is_final = utterance.definite
-
-                # Record timestamps using tracker
-                match (source, invoke_type, is_final):
-                    case ("stream", _, _):
-                        self.two_pass_delay_tracker.record_stream(
-                            current_timestamp
+                    # Extract metadata (always include invoke_type and source for all results)
+                    if is_final:
+                        has_final_result = True
+                        metadata = self._extract_final_result_metadata(
+                            utterance
                         )
-                    case ("two_pass", "soft_vad", _):
-                        self.two_pass_delay_tracker.record_soft_vad(
-                            current_timestamp
+                    else:
+                        metadata = self._extract_non_final_result_metadata(
+                            utterance
                         )
-                    case ("two_pass", "hard_vad", True):
-                        await self._send_two_pass_delay_metrics(
-                            current_timestamp
+
+                    await self._send_asr_result_from_text(
+                        text=utterance.text,
+                        is_final=is_final,
+                        start_ms=actual_start_ms,
+                        duration_ms=duration_ms,
+                        language=result.language,
+                        metadata=metadata,
+                    )
+            else:
+                # Filter out invalid utterances first
+                valid_utterances = [
+                    u
+                    for u in result.utterances
+                    if u.start_time != -1
+                    and u.end_time != -1
+                    and u.text.strip()
+                ]
+
+                # Log warnings for invalid utterances
+                for utterance in result.utterances:
+                    if utterance.start_time == -1 or utterance.end_time == -1:
+                        self.ten_env.log_warn(
+                            f"Skipping utterance with invalid timestamps: {utterance.text}"
                         )
-                    case _:
-                        pass  # Other combinations don't need timestamp recording
 
-                # Calculate start_ms and duration_ms for this utterance
-                actual_start_ms = self._calculate_utterance_start_ms(
-                    utterance.start_time
-                )
-                duration_ms = utterance.end_time - utterance.start_time
+                # Group and merge consecutive utterances with the same definite value
+                merged_utterances = []
+                for is_final, group in itertools.groupby(
+                    valid_utterances, key=lambda u: u.definite
+                ):
+                    group_list = list(group)
+                    if not group_list:
+                        continue
 
-                # Extract metadata (always include invoke_type and source for all results)
-                if is_final:
-                    has_final_result = True
-                    metadata = self._extract_final_result_metadata(utterance)
-                else:
-                    metadata = self._extract_non_final_result_metadata(
-                        utterance
+                    first, last = group_list[0], group_list[-1]
+                    merged_utterances.append(
+                        {
+                            "text": "".join(u.text for u in group_list),
+                            "is_final": is_final,
+                            "start_time": first.start_time,
+                            "duration_ms": last.end_time - first.start_time,
+                            "metadata": (
+                                self._extract_final_result_metadata(last)
+                                if is_final
+                                else self._extract_non_final_result_metadata(
+                                    last
+                                )
+                            ),
+                            "utterance": last,  # Keep reference for timestamp tracking
+                        }
                     )
 
-                await self._send_asr_result_from_text(
-                    text=utterance.text,
-                    is_final=is_final,
-                    start_ms=actual_start_ms,
-                    duration_ms=duration_ms,
-                    language=result.language,
-                    metadata=metadata,
-                )
+                # Process merged utterances
+                for merged in merged_utterances:
+                    is_final = merged["is_final"]
+
+                    # Calculate start_ms for merged utterance
+                    actual_start_ms = self._calculate_utterance_start_ms(
+                        merged["start_time"]
+                    )
+
+                    if is_final:
+                        has_final_result = True
+
+                    await self._send_asr_result_from_text(
+                        text=merged["text"],
+                        is_final=is_final,
+                        start_ms=actual_start_ms,
+                        duration_ms=merged["duration_ms"],
+                        language=result.language,
+                        metadata=merged["metadata"],
+                    )
 
             # finalize end signal if there was any final result
             if has_final_result:
