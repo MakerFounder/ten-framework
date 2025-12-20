@@ -2,7 +2,7 @@ FROM ghcr.io/ten-framework/ten_agent_build:0.7.12 AS builder
 
 ARG SESSION_CONTROL_CONF=session_control.conf
 ARG USE_AGENT=agents/examples/demo
-# Force rebuild: 2024-12-20-v4-flashlive-demo
+# Force rebuild: 2024-12-20-v5-use-demo
 
 WORKDIR /app
 
