@@ -20,6 +20,7 @@ services:
     working_dir: /app
     env_file:
       - .env
+    command: bash -c "cd /app/agents/examples/demo/tenapp && ./scripts/install_python_deps.sh && cd /app && ./server/bin/api -tenapp_dir=/app/agents/examples/demo/tenapp"
     networks:
       - ten_agent_network
   # ten_graph_designer:
