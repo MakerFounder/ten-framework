@@ -2,6 +2,178 @@
   "ten": {
     "predefined_graphs": [
       {
+        "name": "flashlive",
+        "auto_start": true,
+        "graph": {
+          "nodes": [
+            {
+              "type": "extension",
+              "name": "agora_rtc",
+              "addon": "agora_rtc",
+              "extension_group": "default",
+              "property": {
+                "app_id": "${env:AGORA_APP_ID}",
+                "app_certificate": "${env:AGORA_APP_CERTIFICATE|}",
+                "channel": "ten_agent_test",
+                "stream_id": 1234,
+                "remote_stream_id": 123,
+                "subscribe_audio": true,
+                "publish_audio": true,
+                "publish_data": true,
+                "enable_agora_asr": false,
+                "audio_frame_send_delay_ms": 0,
+                "subscribe_audio_samples_per_frame": 160
+              }
+            },
+            {
+              "type": "extension",
+              "name": "stt",
+              "addon": "deepgram_ws_asr_python",
+              "extension_group": "stt",
+              "property": {
+                "params": {
+                  "api_key": "${env:DEEPGRAM_API_KEY}",
+                  "url": "wss://api.deepgram.com/v2/listen",
+                  "model": "flux-general-en",
+                  "language": "en-US",
+                  "eot_threshold": 0.65,
+                  "eot_timeout_ms": 1000
+                },
+                "sample_rate": 16000,
+                "encoding": "linear16",
+                "interim_results": true,
+                "punctuate": true,
+                "eager_eot_threshold": 0.35,
+                "interrupt_on_speech": true
+              }
+            },
+            {
+              "type": "extension",
+              "name": "llm",
+              "addon": "gemini_llm2_python",
+              "extension_group": "chatgpt",
+              "property": {
+                "api_key": "${env:GEMINI_API_KEY}",
+                "model": "gemini-3-flash-preview",
+                "max_tokens": 1024,
+                "temperature": 0.9,
+                "prompt": "You are FlashLive, a helpful AI voice assistant. Start your response immediately with the answer, no filler words. Keep responses very short (1-2 sentences unless the user asks for more detail.) and conversational since this is a voice chat. Be natural, engaging, and helpful.",
+                "max_memory_length": 10,
+                "thinking_level": "OFF"
+              }
+            },
+            {
+              "type": "extension",
+              "name": "tts",
+              "addon": "inworld_tts_python",
+              "extension_group": "tts",
+              "property": {
+                "params": {
+                  "api_key": "${env:INWORLD_API_KEY}",
+                  "voice_id": "Ashley",
+                  "model_id": "inworld-tts-1-max",
+                  "sample_rate": 16000
+                }
+              }
+            },
+            {
+              "type": "extension",
+              "name": "main_control",
+              "addon": "main_cascade_python",
+              "extension_group": "control",
+              "property": {
+                "greeting": "Hey! What can I help with?"
+              }
+            },
+            {
+              "type": "extension",
+              "name": "message_collector",
+              "addon": "message_collector2",
+              "extension_group": "transcriber",
+              "property": {}
+            },
+            {
+              "type": "extension",
+              "name": "streamid_adapter",
+              "addon": "streamid_adapter",
+              "property": {}
+            }
+          ],
+          "connections": [
+            {
+              "extension": "main_control",
+              "cmd": [
+                {
+                  "names": [
+                    "on_user_joined",
+                    "on_user_left"
+                  ],
+                  "source": [
+                    {
+                      "extension": "agora_rtc"
+                    }
+                  ]
+                }
+              ],
+              "data": [
+                {
+                  "name": "asr_result",
+                  "source": [
+                    {
+                      "extension": "stt"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "extension": "agora_rtc",
+              "audio_frame": [
+                {
+                  "name": "pcm_frame",
+                  "dest": [
+                    {
+                      "extension": "streamid_adapter"
+                    }
+                  ]
+                },
+                {
+                  "name": "pcm_frame",
+                  "source": [
+                    {
+                      "extension": "tts"
+                    }
+                  ]
+                }
+              ],
+              "data": [
+                {
+                  "name": "data",
+                  "source": [
+                    {
+                      "extension": "message_collector"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "extension": "streamid_adapter",
+              "audio_frame": [
+                {
+                  "name": "pcm_frame",
+                  "dest": [
+                    {
+                      "extension": "stt"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
         "name": "grok4",
         "auto_start": true,
         "graph": {
@@ -2576,350 +2748,6 @@
                   "source": [
                     {
                       "extension": "weatherapi_tool_python"
-                    }
-                  ]
-                }
-              ],
-              "data": [
-                {
-                  "name": "asr_result",
-                  "source": [
-                    {
-                      "extension": "stt"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "extension": "agora_rtc",
-              "audio_frame": [
-                {
-                  "name": "pcm_frame",
-                  "dest": [
-                    {
-                      "extension": "streamid_adapter"
-                    }
-                  ]
-                },
-                {
-                  "name": "pcm_frame",
-                  "source": [
-                    {
-                      "extension": "tts"
-                    }
-                  ]
-                }
-              ],
-              "data": [
-                {
-                  "name": "data",
-                  "source": [
-                    {
-                      "extension": "message_collector"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "extension": "streamid_adapter",
-              "audio_frame": [
-                {
-                  "name": "pcm_frame",
-                  "dest": [
-                    {
-                      "extension": "stt"
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      },
-      {
-        "name": "flashlive",
-        "auto_start": false,
-        "graph": {
-          "nodes": [
-            {
-              "type": "extension",
-              "name": "agora_rtc",
-              "addon": "agora_rtc",
-              "extension_group": "default",
-              "property": {
-                "app_id": "${env:AGORA_APP_ID}",
-                "app_certificate": "${env:AGORA_APP_CERTIFICATE|}",
-                "channel": "ten_agent_test",
-                "stream_id": 1234,
-                "remote_stream_id": 123,
-                "subscribe_audio": true,
-                "publish_audio": true,
-                "publish_data": true,
-                "enable_agora_asr": false,
-                "audio_frame_send_delay_ms": 0,
-                "subscribe_audio_samples_per_frame": 160
-              }
-            },
-            {
-              "type": "extension",
-              "name": "stt",
-              "addon": "deepgram_ws_asr_python",
-              "extension_group": "stt",
-              "property": {
-                "params": {
-                  "api_key": "${env:DEEPGRAM_API_KEY}",
-                  "url": "wss://api.deepgram.com/v2/listen",
-                  "model": "flux-general-en",
-                  "language": "en-US",
-                  "eot_threshold": 0.65,
-                  "eot_timeout_ms": 1000
-                },
-                "sample_rate": 16000,
-                "encoding": "linear16",
-                "interim_results": true,
-                "punctuate": true,
-                "eager_eot_threshold": 0.35,
-                "interrupt_on_speech": true
-              }
-            },
-            {
-              "type": "extension",
-              "name": "llm",
-              "addon": "gemini_llm2_python",
-              "extension_group": "chatgpt",
-              "property": {
-                "api_key": "${env:GEMINI_API_KEY}",
-                "model": "gemini-3-flash-preview",
-                "max_tokens": 1024,
-                "temperature": 0.9,
-                "prompt": "You are FlashLive, a helpful AI voice assistant. Start your response immediately with the answer, no filler words. Keep responses very short (1-2 sentences unless the user asks for more detail.) and conversational since this is a voice chat. Be natural, engaging, and helpful.",
-                "max_memory_length": 10,
-                "thinking_level": "OFF"
-              }
-            },
-            {
-              "type": "extension",
-              "name": "tts",
-              "addon": "inworld_tts_python",
-              "extension_group": "tts",
-              "property": {
-                "params": {
-                  "api_key": "${env:INWORLD_API_KEY}",
-                  "voice_id": "Ashley",
-                  "model_id": "inworld-tts-1-max",
-                  "sample_rate": 16000
-                }
-              }
-            },
-            {
-              "type": "extension",
-              "name": "main_control",
-              "addon": "main_cascade_python",
-              "extension_group": "control",
-              "property": {
-                "greeting": "Hey! What can I help with?"
-              }
-            },
-            {
-              "type": "extension",
-              "name": "message_collector",
-              "addon": "message_collector2",
-              "extension_group": "transcriber",
-              "property": {}
-            },
-            {
-              "type": "extension",
-              "name": "streamid_adapter",
-              "addon": "streamid_adapter",
-              "property": {}
-            }
-          ],
-          "connections": [
-            {
-              "extension": "main_control",
-              "cmd": [
-                {
-                  "names": [
-                    "on_user_joined",
-                    "on_user_left"
-                  ],
-                  "source": [
-                    {
-                      "extension": "agora_rtc"
-                    }
-                  ]
-                }
-              ],
-              "data": [
-                {
-                  "name": "asr_result",
-                  "source": [
-                    {
-                      "extension": "stt"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "extension": "agora_rtc",
-              "audio_frame": [
-                {
-                  "name": "pcm_frame",
-                  "dest": [
-                    {
-                      "extension": "streamid_adapter"
-                    }
-                  ]
-                },
-                {
-                  "name": "pcm_frame",
-                  "source": [
-                    {
-                      "extension": "tts"
-                    }
-                  ]
-                }
-              ],
-              "data": [
-                {
-                  "name": "data",
-                  "source": [
-                    {
-                      "extension": "message_collector"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "extension": "streamid_adapter",
-              "audio_frame": [
-                {
-                  "name": "pcm_frame",
-                  "dest": [
-                    {
-                      "extension": "stt"
-                    }
-                  ]
-                }
-              ]
-            }
-          ]
-        }
-      },
-      {
-        "name": "flashlive",
-        "auto_start": true,
-        "graph": {
-          "nodes": [
-            {
-              "type": "extension",
-              "name": "agora_rtc",
-              "addon": "agora_rtc",
-              "extension_group": "default",
-              "property": {
-                "app_id": "${env:AGORA_APP_ID}",
-                "app_certificate": "${env:AGORA_APP_CERTIFICATE|}",
-                "channel": "ten_agent_test",
-                "stream_id": 1234,
-                "remote_stream_id": 123,
-                "subscribe_audio": true,
-                "publish_audio": true,
-                "publish_data": true,
-                "enable_agora_asr": false,
-                "audio_frame_send_delay_ms": 0,
-                "subscribe_audio_samples_per_frame": 160
-              }
-            },
-            {
-              "type": "extension",
-              "name": "stt",
-              "addon": "deepgram_ws_asr_python",
-              "extension_group": "stt",
-              "property": {
-                "params": {
-                  "api_key": "${env:DEEPGRAM_API_KEY}",
-                  "url": "wss://api.deepgram.com/v2/listen",
-                  "model": "flux-general-en",
-                  "language": "en-US",
-                  "eot_threshold": 0.65,
-                  "eot_timeout_ms": 1000
-                },
-                "sample_rate": 16000,
-                "encoding": "linear16",
-                "interim_results": true,
-                "punctuate": true,
-                "eager_eot_threshold": 0.35,
-                "interrupt_on_speech": true
-              }
-            },
-            {
-              "type": "extension",
-              "name": "llm",
-              "addon": "gemini_llm2_python",
-              "extension_group": "chatgpt",
-              "property": {
-                "api_key": "${env:GEMINI_API_KEY}",
-                "model": "gemini-2.5-flash-preview-05-20",
-                "max_tokens": 1024,
-                "temperature": 0.9,
-                "prompt": "You are FlashLive, a helpful AI voice assistant. Start your response immediately with the answer, no filler words. Keep responses very short (1-2 sentences unless the user asks for more detail.) and conversational since this is a voice chat. Be natural, engaging, and helpful.",
-                "max_memory_length": 10,
-                "thinking_level": "OFF"
-              }
-            },
-            {
-              "type": "extension",
-              "name": "tts",
-              "addon": "inworld_tts_python",
-              "extension_group": "tts",
-              "property": {
-                "params": {
-                  "api_key": "${env:INWORLD_API_KEY}",
-                  "voice_id": "Ashley",
-                  "model_id": "inworld-tts-1-max",
-                  "sample_rate": 16000
-                }
-              }
-            },
-            {
-              "type": "extension",
-              "name": "main_control",
-              "addon": "main_cascade_python",
-              "extension_group": "control",
-              "property": {
-                "greeting": "Hey! What can I help with?"
-              }
-            },
-            {
-              "type": "extension",
-              "name": "message_collector",
-              "addon": "message_collector2",
-              "extension_group": "transcriber",
-              "property": {}
-            },
-            {
-              "type": "extension",
-              "name": "streamid_adapter",
-              "addon": "streamid_adapter",
-              "property": {}
-            }
-          ],
-          "connections": [
-            {
-              "extension": "main_control",
-              "cmd": [
-                {
-                  "names": [
-                    "on_user_joined",
-                    "on_user_left"
-                  ],
-                  "source": [
-                    {
-                      "extension": "agora_rtc"
                     }
                   ]
                 }

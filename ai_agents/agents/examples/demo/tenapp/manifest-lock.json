@@ -277,6 +277,23 @@
     },
     {
       "type": "extension",
+      "name": "deepgram_ws_asr_python",
+      "version": "0.1.0",
+      "hash": "fedb09003b0a42f55ab91bdf6b32396ad485bb6b5d1b3c7842c4b54389d7a88a",
+      "dependencies": [
+        {
+          "type": "system",
+          "name": "ten_runtime_python"
+        },
+        {
+          "type": "system",
+          "name": "ten_ai_base"
+        }
+      ],
+      "path": "../../../ten_packages/extension/deepgram_ws_asr_python"
+    },
+    {
+      "type": "extension",
       "name": "gemini_llm2_python",
       "version": "0.1.0",
       "hash": "ace9d18aa78ad810294b4bb943c1e7100b39523109b2e465d462e1d4ace79593",
