@@ -2,10 +2,11 @@ FROM ghcr.io/ten-framework/ten_agent_build:0.7.12 AS builder
 
 ARG SESSION_CONTROL_CONF=session_control.conf
 ARG USE_AGENT=agents/examples/demo
-# Force rebuild: 2024-12-20-v5-use-demo
+ARG CACHE_BUST=2024-12-20-v6
 
 WORKDIR /app
 
+RUN echo "Build version: ${CACHE_BUST}"
 COPY . .
 
 RUN cd ${USE_AGENT} && \
