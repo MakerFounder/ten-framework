@@ -104,6 +104,7 @@ class InworldTTSExtension(AsyncTTS2BaseExtension):
     async def _synthesize(self, text: str, request_id: str) -> None:
         """Synthesize text to speech using optimized streaming."""
         if not self._session:
+            self.ten_env.log_error(f"[TTS] No session available")
             return
 
         url = f"{self.config.base_url}/tts/v1/voice:stream"
@@ -125,12 +126,13 @@ class InworldTTSExtension(AsyncTTS2BaseExtension):
         }
 
         first_audio = True
+        total_bytes = 0
 
         try:
             async with self._session.post(url, headers=headers, json=payload) as response:
                 if response.status != 200:
                     error_text = await response.text()
-                    self.ten_env.log_error(f"TTS API error: {response.status}")
+                    self.ten_env.log_error(f"TTS API error: {response.status} - {error_text}")
                     await self.send_tts_error(
                         request_id=request_id,
                         error=ModuleError(
@@ -165,6 +167,7 @@ class InworldTTSExtension(AsyncTTS2BaseExtension):
                                     audio_bytes = audio_bytes[44:]
                                 
                                 if len(audio_bytes) > 0:
+                                    total_bytes += len(audio_bytes)
                                     if first_audio:
                                         await self.send_tts_audio_start(request_id=request_id)
                                         first_audio = False
@@ -182,12 +185,15 @@ class InworldTTSExtension(AsyncTTS2BaseExtension):
                             if len(audio_bytes) > 44 and audio_bytes[:4] == b"RIFF":
                                 audio_bytes = audio_bytes[44:]
                             if len(audio_bytes) > 0:
+                                total_bytes += len(audio_bytes)
                                 if first_audio:
                                     await self.send_tts_audio_start(request_id=request_id)
                                     first_audio = False
                                 await self.send_tts_audio_data(audio_data=audio_bytes)
                     except json.JSONDecodeError:
                         pass
+                
+                self.ten_env.log_info(f"[TTS] Done: {total_bytes} bytes")
 
         except aiohttp.ClientError as e:
             self.ten_env.log_error(f"TTS request failed: {e}")

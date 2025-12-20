@@ -79,19 +79,12 @@ class MainControlExtension(AsyncExtension):
         
         current_time = time.time()
         prev_text = self._last_text
-        
-        # Detect if this is genuinely NEW speech (user barge-in)
-        # New speech = text that doesn't start with the previous text (not a continuation)
-        is_new_speech = (
-            not event.text.startswith(prev_text) and 
-            len(event.text) < len(prev_text) + 5
-        )
-        
-        # Only interrupt if:
-        # 1. It's been more than 500ms since last final (prevents TurnResumed issues)
-        # 2. OR it's clearly new speech (short text that's not a continuation)
         time_since_final = current_time - self._last_final_time
-        should_interrupt = (time_since_final > 0.5) or (is_new_speech and len(event.text) <= 20)
+        
+        # ONLY interrupt if enough time has passed since last final (500ms)
+        # This prevents false interrupts from echo, late ASR events, etc.
+        # User barge-in will naturally have >500ms gap from previous turn
+        should_interrupt = time_since_final > 0.5
         
         if should_interrupt and (event.final or len(event.text) > 2):
             await self._interrupt()
@@ -101,8 +94,7 @@ class MainControlExtension(AsyncExtension):
         if event.final:
             # Only queue LLM if we haven't already queued this exact text recently
             # This prevents duplicate requests from EagerEndOfTurn + EndOfTurn
-            time_since_last_final = current_time - self._last_final_time
-            if time_since_last_final > 0.3:
+            if time_since_final > 0.3:
                 self._last_final_time = current_time
                 self.turn_id += 1
                 await self.agent.queue_llm_input(event.text)
