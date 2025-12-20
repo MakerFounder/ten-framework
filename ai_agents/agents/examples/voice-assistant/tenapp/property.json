@@ -2,7 +2,7 @@
   "ten": {
     "predefined_graphs": [
       {
-        "name": "voice_assistant",
+        "name": "flashlive",
         "auto_start": true,
         "graph": {
           "nodes": [
@@ -20,62 +20,69 @@
                 "subscribe_audio": true,
                 "publish_audio": true,
                 "publish_data": true,
-                "enable_agora_asr": false
+                "enable_agora_asr": false,
+                "audio_frame_send_delay_ms": 0,
+                "subscribe_audio_samples_per_frame": 160
               }
             },
             {
               "type": "extension",
               "name": "stt",
-              "addon": "deepgram_asr_python",
+              "addon": "deepgram_ws_asr_python",
               "extension_group": "stt",
               "property": {
                 "params": {
                   "api_key": "${env:DEEPGRAM_API_KEY}",
+                  "url": "wss://api.deepgram.com/v2/listen",
+                  "model": "flux-general-en",
                   "language": "en-US",
-                  "model": "nova-3"
-                }
+                  "eot_threshold": 0.65,
+                  "eot_timeout_ms": 1000
+                },
+                "sample_rate": 16000,
+                "encoding": "linear16",
+                "interim_results": true,
+                "punctuate": true,
+                "eager_eot_threshold": 0.35,
+                "interrupt_on_speech": true
               }
             },
             {
               "type": "extension",
               "name": "llm",
-              "addon": "openai_llm2_python",
+              "addon": "gemini_llm2_python",
               "extension_group": "chatgpt",
               "property": {
-                "base_url": "https://api.openai.com/v1",
-                "api_key": "${env:OPENAI_API_KEY}",
-                "frequency_penalty": 0.9,
-                "model": "${env:OPENAI_MODEL}",
-                "max_tokens": 512,
-                "prompt": "",
-                "proxy_url": "${env:OPENAI_PROXY_URL|}",
-                "greeting": "TEN Agent connected. How can I help you today?",
-                "max_memory_length": 10
+                "api_key": "${env:GEMINI_API_KEY}",
+                "model": "gemini-2.5-flash-preview-05-20",
+                "max_tokens": 1024,
+                "temperature": 0.9,
+                "prompt": "You are FlashLive, a helpful AI voice assistant. Start your response immediately with the answer, no filler words. Keep responses very short (1-2 sentences unless the user asks for more detail.) and conversational since this is a voice chat. Be natural, engaging, and helpful.",
+                "max_memory_length": 10,
+                "thinking_level": "OFF"
               }
             },
             {
               "type": "extension",
               "name": "tts",
-              "addon": "elevenlabs_tts2_python",
+              "addon": "inworld_tts_python",
               "extension_group": "tts",
               "property": {
-                "dump": false,
-                "dump_path": "./",
                 "params": {
-                  "key": "${env:ELEVENLABS_TTS_KEY}",
-                  "model_id": "eleven_multilingual_v2",
-                  "voice_id": "pNInz6obpgDQGcFmaJgB",
-                  "output_format": "pcm_16000"
+                  "api_key": "${env:INWORLD_API_KEY}",
+                  "voice_id": "Ashley",
+                  "model_id": "inworld-tts-1-max",
+                  "sample_rate": 16000
                 }
               }
             },
             {
               "type": "extension",
               "name": "main_control",
-              "addon": "main_python",
+              "addon": "main_cascade_python",
               "extension_group": "control",
               "property": {
-                "greeting": "TEN Agent connected. How can I help you today?"
+                "greeting": "Hey! What can I help with?"
               }
             },
             {
@@ -84,15 +91,6 @@
               "addon": "message_collector2",
               "extension_group": "transcriber",
               "property": {}
-            },
-            {
-              "type": "extension",
-              "name": "weatherapi_tool_python",
-              "addon": "weatherapi_tool_python",
-              "extension_group": "default",
-              "property": {
-                "api_key": "${env:WEATHERAPI_API_KEY|}"
-              }
             },
             {
               "type": "extension",
@@ -113,16 +111,6 @@
                   "source": [
                     {
                       "extension": "agora_rtc"
-                    }
-                  ]
-                },
-                {
-                  "names": [
-                    "tool_register"
-                  ],
-                  "source": [
-                    {
-                      "extension": "weatherapi_tool_python"
                     }
                   ]
                 }

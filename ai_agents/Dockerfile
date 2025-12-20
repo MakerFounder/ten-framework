@@ -1,16 +1,15 @@
 FROM ghcr.io/ten-framework/ten_agent_build:0.7.12 AS builder
 
 ARG SESSION_CONTROL_CONF=session_control.conf
-# Add a new argument for USE_AGENT (defaulting to 'agents/examples/default')
-ARG USE_AGENT=agents/examples/voice-assistant
+ARG USE_AGENT=agents/examples/demo
+# Force rebuild: 2024-12-20-v4-flashlive-demo
 
 WORKDIR /app
 
 COPY . .
-# COPY agents/${SESSION_CONTROL_CONF} agents/session_control.conf
 
 RUN cd ${USE_AGENT} && \
-  task install && task release
+  task install-docker && task release
 
 RUN mv ${USE_AGENT}/tenapp/.release/ agents/
 
@@ -34,9 +33,10 @@ WORKDIR /app
 
 COPY --from=builder /app/agents/.release/ agents/
 COPY --from=builder /app/server/bin/api /app/server/bin/api
+COPY --from=builder /usr/local/bin/tman /usr/local/bin/tman
 COPY --from=builder /usr/local/lib /usr/local/lib
 COPY --from=builder /usr/lib/python3 /usr/lib/python3
 
 EXPOSE 8080
 
-ENTRYPOINT ["/app/server/bin/api"]
+ENTRYPOINT ["/app/server/bin/api", "-tenapp_dir=/app/agents"]

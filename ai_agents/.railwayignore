@@ -1,0 +1,13 @@
+agents/examples/demo
+agents/examples/voice-assistant/tenapp/ten_packages
+agents/examples/voice-assistant-advanced/tenapp/ten_packages
+agents/examples/transcription/tenapp/ten_packages
+agents/examples/http-control/tenapp/ten_packages
+agents/examples/voice-assistant-sip-twilio/tenapp/ten_packages
+agents/examples/voice-assistant-with-ten-vad/tenapp/ten_packages
+playground
+.next
+node_modules
+__pycache__
+*.pyc
+.git
